@@ -57,7 +57,9 @@ stateDiagram-v2
     Executing --> Disconnected: Connection is lost
 ```
 
-The userscript may reconnect so that the broadcaster can restore service, but Streamer.bot must turn Team Solve off as soon as the active connection is lost. Pending commands are failed, not saved for later execution. Reconnection alone must not re-enable Team Solve.
+The userscript reconnects when the SudokuPad page is eligible. Streamer.bot pauses contributions as soon as the active connection is lost while preserving Team Solve's saved on/off state and access settings. Pending commands are failed, not saved for later execution. Once the userscript is ready again, contributions resume automatically if Team Solve is still enabled. An explicit `!teamsolve off` prevents that resumption.
+
+After a Streamer.bot restart, the saved on/off state and access settings are restored. The userscript reports readiness as usual; Streamer.bot decides whether to resume contributions. The userscript does not manage these settings.
 
 ## Normalized action model
 
@@ -120,4 +122,3 @@ Lines and border lines should fit the normalized action model even if their Sudo
 - Multi-cell target and path representation
 - Detailed semantics for colors, lines, and borders
 - Stable failure and ignored reason codes
-

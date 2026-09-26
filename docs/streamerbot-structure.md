@@ -9,20 +9,23 @@ Streamer.bot owns the Twitch-facing workflow. It receives chat events, controls 
 ## Responsibilities
 
 - Receive Twitch chat messages in arrival order.
-- Recognize broadcaster-only Team Solve control commands.
-- Start Team Solve only when an explicit permission policy is supplied.
-- Check the active permission policy for every puzzle command.
+- Recognize the single `!teamsolve` control command and restrict it to the broadcaster and moderators.
+- Save the selected access option and enable Team Solve when a permission is set.
+- Persist and restore the on/off state, selected access option, and named-user list across sessions.
+- Check enabled state, browser readiness, and the selected access option for every puzzle command.
 - Parse valid chat syntax into a source-independent action.
 - Assign a request ID and preserve the Twitch context for diagnostics.
 - Deliver actions to the Tampermonkey userscript over a local WebSocket.
 - Match browser acknowledgements to pending requests.
-- Notify chat about syntax errors, permission failures, and Team Solve state changes.
-- Turn Team Solve off and notify chat if the browser disconnects.
+- Send public control-command replies and notify chat about syntax errors, permission failures, access changes, and Team Solve state changes.
+- Pause contributions and notify chat if the browser disconnects; resume automatically when ready if Team Solve is still enabled.
 - Persist per-stream diagnostic logs.
 
 ## Suggested logical structure
 
 These are responsibility groups, not final Streamer.bot action names.
+
+Register one streamer control command, `!teamsolve`, and route its parameters through a shared controller. The permission choices, status query, and `off` parameter do not need separate Streamer.bot command entries. The human-facing behavior is defined in the [streamer command guide](streamer-commands.md).
 
 ```mermaid
 flowchart TD
@@ -50,44 +53,55 @@ Suggested modules or grouped actions:
 
 | Area | Purpose |
 | --- | --- |
-| Command router | Separates broadcaster controls from puzzle commands and unrelated chat |
-| Team Solve controller | Owns enabled state and the current permission policy |
-| Command Auth gate | Validates enabled state and permissions for everyone, follower, subscriber, and specific-user policies |
+| Command router | Separates broadcaster/moderator controls from puzzle commands and unrelated chat |
+| Team Solve controller | Owns and persists enabled state, the selected access option, and the named-user list |
+| Command Auth gate | Requires enabled state and browser readiness, then checks the selected access option with broadcaster/moderator access always allowed |
 | Command parser | Implements the documented human-facing grammar |
 | Action normalizer | Produces the versioned, source-independent action contract |
 | Ordered dispatcher | Preserves chat arrival order and manages pending requests |
 | WebSocket transport | Tracks the browser connection and sends/receives protocol messages |
-| Chat announcer | Sends concise status and error feedback, does not write success messages |
+| Chat announcer | Sends public control replies, status announcements, and errors; omits puzzle-action success messages |
 | Diagnostic logger | Writes correlated, structured logs |
 
-## Runtime state
+## Saved and runtime state
 
-| State | Initial value | Notes |
+| State | First setup / initialization | Notes |
 | --- | --- | --- |
-| Team Solve enabled | `false` | Must always reset to off after restart |
-| Active permission policy | none | Must be supplied by each successful enable command |
-| Browser connection | disconnected until handshake | Loss of an active connection disables Team Solve |
+| Team Solve enabled | `false` on first setup | Persist and restore after restart; connection loss does not change it |
+| Selected access option | `list` on first setup | Persist and restore exactly one of `everyone`, `followers`, `subscribers`, or `list` |
+| Named-user list | empty on first setup | Persist independently of the selected access option; supplied names replace the entire list |
+| Browser connection | disconnected until handshake | Runtime readiness; connection loss pauses contributions while preserving enabled state |
 | Outgoing action queue | empty | FIFO; commands are not retained across disconnects or restarts |
 | Pending requests | empty | Keyed by request ID until acknowledgement or timeout |
 
-The previous permission policy must not be silently reused. It may be recorded in logs, but a fresh policy is required to enable Team Solve again.
+Startup always restores the saved enabled state, selected access option, and list. There is no configurable startup policy. If no saved settings exist, use the first-setup values above. Restoring enabled state does not permit dispatch until the browser is ready.
+
+Public status distinguishes `Off` (disabled), `Waiting` (enabled but the browser is not ready), and `On` (enabled and ready). `Waiting` preserves an enabled state, including across restarts. Turning Team Solve off while waiting saves disabled state and prevents automatic starting or resuming.
 
 ## Enable and disable workflow
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Off
+    [*] --> Restore
+    Restore --> Off: Saved off or first setup
+    Restore --> Waiting: Saved on
     Off --> Off: Puzzle commands do not execute
-    Off --> On: Broadcaster enable command with valid policy and ready browser
-    On --> Off: Broadcaster disable command
-    On --> Off: Browser disconnects
-    On --> Off: Streamer.bot restarts
+    Off --> On: Permission command and ready browser
+    Off --> Waiting: Permission command and browser not ready
+    On --> On: Permission command updates access
+    On --> Waiting: Browser connection lost or not ready
+    Waiting --> On: Browser ready
+    Waiting --> Waiting: Permission command updates access
+    On --> Off: !teamsolve off
+    Waiting --> Off: !teamsolve off
     Off --> Off: Browser reconnects
 ```
 
-When Team Solve enters `On` or `Off`, Streamer.bot announces the change in Twitch chat. A browser reconnection makes the transport ready but does not turn Team Solve back on.
+Only the broadcaster and moderators can issue control commands. `!teamsolve everyone`, `!teamsolve followers`, `!teamsolve subscribers`, and `!teamsolve list [names]` save the selected access option and enable Team Solve. While already on, a new selection takes effect immediately. Supplying names with `list` replaces the saved list; omitting names keeps it. Selecting another option also keeps the list.
 
-An enable request while the browser is disconnected results in Team Solve remaining off with a broadcaster-visible error.
+`!teamsolve off` disables Team Solve without clearing access settings. `!teamsolve` without parameters reports the public status, selected access option, and saved list without changing state, even when list access is not selected.
+
+When Team Solve starts, stops, waits for a connection, or resumes, Streamer.bot announces the change in Twitch chat. An enable request while disconnected enters `Waiting` and automatically starts when the browser is ready. Connection loss while enabled also enters `Waiting`; reconnecting resumes contributions unless Team Solve has been explicitly turned off.
 
 ## Puzzle-command workflow
 
@@ -103,7 +117,7 @@ sequenceDiagram
 
     T->>R: Chat event
     R->>A: Candidate puzzle command
-    A->>A: Check enabled state and permission policy
+    A->>A: Check enabled state, browser readiness, and access
     A->>P: Authorized command text
     P->>D: Normalized action and Twitch context
     D->>L: Record request ID and send attempt
@@ -119,7 +133,12 @@ Valid actions are dispatched immediately in Twitch event order. There is no vote
 | Condition | Twitch chat | Diagnostic log |
 | --- | --- | --- |
 | Team Solve enabled or disabled | Announce | Record |
-| Browser disconnects while enabled | Announce that Team Solve was turned off | Record |
+| Enabled while the browser is not ready | Announce that Team Solve is waiting for a connection | Record |
+| Browser disconnects or becomes unavailable while enabled | Announce that contributions are paused and will resume when ready | Record |
+| Browser becomes ready while enabled | Announce that Team Solve started or resumed | Record |
+| Selected access option or named-user list changes | Announce the resulting access settings | Record |
+| Control command received | Reply publicly; a change announcement can serve as the reply | Record command and result |
+| Bare `!teamsolve` status query | Show off/on/waiting status, selected access option, and saved list | Record |
 | User lacks permission | Send concise error | Record decision |
 | Command syntax is invalid | Send concise usage feedback | Record parse result |
 | Action applied | No reply; the board is the feedback | Record acknowledgement |
@@ -129,17 +148,17 @@ Repeated public errors may eventually need cooldowns to prevent chat spam.
 
 ## Permission model
 
-The controller must support policies involving everyone, followers, subscribers, and specific users. The policy is provided in the broadcaster's enable command.
+The controller uses exactly one selected access option: everyone, followers, subscribers, or the saved named-user list. The broadcaster and moderators always pass the permission check, but their puzzle commands still require Team Solve to be enabled and the browser to be ready. They can use control commands while Team Solve is off or waiting.
 
-The design still needs to determine:
+The selected option and list are saved across sessions. List membership grants access only when `list` is selected; it does not supplement another option. With list access selected, an empty list permits only the broadcaster and moderators. Switching options preserves the list, and `!teamsolve list` without names selects that saved list and enables Team Solve. Supplying names replaces the list rather than adding to it.
 
-- whether these options are mutually exclusive or composable;
-- whether a named-user list supplements a general audience category;
-- the precedence of broadcaster and moderator privileges;
+Implementation decisions still needed:
+
+- persistent storage and representation of the named-user list;
 - how follower/subscriber status is obtained and how stale data is handled; and
 - username normalization and rename behavior.
 
-Until those decisions are made, the permission evaluator should remain a separate component rather than embedding checks throughout the parser.
+Keep the permission evaluator separate from puzzle-command parsing.
 
 ## WebSocket transport
 
@@ -152,7 +171,7 @@ Required transport behavior:
 - assign or propagate unique request IDs;
 - use bounded timeouts and pending-request storage;
 - fail pending and new requests on disconnect;
-- trigger the Team Solve shutdown workflow after a connection loss; and
+- move enabled Team Solve into a waiting state after a connection loss and resume dispatch when ready unless it has been disabled; and
 - reject malformed, duplicate, or incompatible acknowledgements safely.
 
 ## Diagnostic logging
@@ -179,13 +198,11 @@ Per-user rate limits and cooldowns are explicitly planned but are not required f
 
 ## Open decisions
 
-- Concrete Streamer.bot action/group organization and naming
-- Broadcaster control-command syntax
-- Permission-policy composition and specific-user workflow
+- Internal Streamer.bot action/group organization behind the single `!teamsolve` command
+- Persistent settings storage and named-user identity handling
 - WebSocket setup details, ports, handshake, and protocol schema
-- Behavior when enabling while the browser is disconnected or not on a supported puzzle
+- Detection of browser readiness while a puzzle is loading, changing, or unsupported
 - Timeout and failure feedback behavior
 - Log storage path and session-boundary detection
 - Twitch API/cache behavior for follower and subscriber checks
 - Rate-limit and cooldown rules
-

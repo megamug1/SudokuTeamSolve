@@ -11,6 +11,7 @@ The system receives Twitch chat through Streamer.bot, checks whether a chatter m
 
 ## Documents
 
+- [Team Solve streamer commands](streamer-commands.md)
 - [Twitch chat command language](twitch-command-language.md)
 - [Tampermonkey userscript design](tampermonkey-userscript.md)
 - [Streamer.bot structure](streamerbot-structure.md)
@@ -21,7 +22,7 @@ The system receives Twitch chat through Streamer.bot, checks whether a chatter m
 flowchart LR
     Chatter[Twitch chatter] -->|Chat message| Twitch[Twitch chat]
     Twitch -->|Chat event| SB[Streamer.bot]
-    Broadcaster[Broadcaster] -->|Team Solve control command| Twitch
+    Controller[Broadcaster or moderator] -->|Team Solve control command| Twitch
     SB -->|Validate permissions and parse| SB
     SB -->|Normalized action over local WebSocket| TM[Tampermonkey userscript]
     TM -->|Apply puzzle action| SP[SudokuPad]
@@ -45,7 +46,7 @@ sequenceDiagram
 
     C->>T: Submit puzzle command
     T->>S: Deliver chat event
-    S->>S: Check Team Solve state
+    S->>S: Check Team Solve state and browser readiness
     S->>S: Check user permission
     S->>S: Parse and normalize command
     S->>U: Send action with request ID
@@ -62,23 +63,27 @@ Valid actions are processed immediately in chat-message order. There is no votin
 
 ### Team Solve state
 
-- Team Solve always starts **off** when Streamer.bot or the browser restarts.
-- Only the broadcaster can turn Team Solve on or off through Twitch chat commands.
-- The command that turns Team Solve on must also specify the active permission policy. A previous policy is not implicitly reused.
-- Later commands can adjust permissions while keeping Team Solve on.
-- Twitch chat is notified when Team Solve state is significantly changed.
-- If the browser connection is lost, Streamer.bot turns Team Solve off and announces the disconnection in chat. Commands are not queued for later delivery.
+- Team Solve persists its on/off state, selected access option, and named-user list across sessions. Startup always restores the saved state; there is no startup configuration option.
+- On first setup, Team Solve is **off**, with list access selected and an empty list.
+- The broadcaster and moderators control Team Solve through one command, `!teamsolve`, with different parameters. See the [streamer command guide](streamer-commands.md) for the complete command set.
+- Selecting `everyone`, `followers`, `subscribers`, or `list` saves that access option and turns Team Solve on. When already on, the change takes effect immediately.
+- `!teamsolve off` turns it off without clearing the selected access option or list. `!teamsolve` without parameters reports status and saved access settings without changing anything.
+- Team Solve accepts puzzle actions only while enabled and connected to a ready browser. Enabling it before the connection is ready makes it wait and start automatically when ready.
+- A lost browser connection pauses contributions without changing the saved on/off state. They resume automatically when the connection returns, unless Team Solve has been turned off. Commands are not queued for later delivery.
+- Command replies, access changes, and announcements about starting, stopping, waiting, and resuming appear publicly in Twitch chat.
 
 ### Permissions
 
-The design must be able to allow contributions from:
+Exactly one access option applies at a time:
 
 - everyone;
 - followers;
 - subscribers; and
-- specifically named users.
+- specifically named users on the saved list.
 
-The exact policy syntax and whether these categories can be combined remain open design decisions.
+The broadcaster and moderators can always contribute while Team Solve is on and the browser is ready, regardless of the selected option.
+
+The selected option and named-user list persist independently. Switching to another option keeps the list. `!teamsolve list` reuses it; `!teamsolve list Alice Bob` replaces it with the supplied names. With list access selected, an empty list allows only the broadcaster and moderators to contribute. `!teamsolve` reports the saved list even when another option is selected.
 
 ### Puzzle actions
 
@@ -101,7 +106,7 @@ Commands that cannot affect the puzzle are silently ignored by the user script. 
 
 - Invalid syntax produces chat-visible feedback.
 - Lack of permission produces chat-visible feedback.
-- Successful actions are shown through visible change in SudokuPad as their user feedback; success messages do not get sent to chat.
+- Successful puzzle actions are shown through visible change in SudokuPad as their user feedback; puzzle-action success messages do not get sent to chat. Control commands receive public replies.
 - Actions that have no possible effect are exeucted with not visible indication.
 - Browser execution failures are recorded for diagnosis. The exact chat response for an execution failure remains to be designed.
 
@@ -139,19 +144,16 @@ Each phase should preserve the command-language and transport model established 
 - Keep SudokuPad-specific execution in the userscript.
 - Use a versioned, normalized action contract between the two components.
 - Preserve message order and make each action traceable end to end.
-- Fail safely: Team Solve is off by default and turns off when its browser connection is lost.
+- Restore the saved on/off state and access settings. Pause contributions when the browser is unavailable and resume when it is ready, unless Team Solve has been turned off.
 - Validate at boundaries even though communication is local to one computer.
 - Prefer explicit operations over state-dependent toggles.
 
 ## Open decisions
 
-- Exact Twitch command names and grammar
-- Whether permission categories are exclusive or cumulative
-- Representation of specific-user allowlists
+- Persistent storage and Twitch identity handling for the named-user list
 - Whether one command may target multiple cells, especially for lines
 - Exact semantics for colors, lines, borders, and clearing a mark type
 - SudokuPad integration method and stable page hooks
 - WebSocket protocol fields, authentication needs, timeouts, and version negotiation
 - Chat behavior for browser-side execution failures
 - Rate-limit and cooldown policy after the initial release
-

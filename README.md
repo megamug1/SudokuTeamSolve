@@ -11,9 +11,12 @@ flowchart LR
 ```
 
 ## Turning on and off team solve
-The streamer decides when Team Solve is on and who may contribute. They might open it to everyone, followers, subscribers, or selected chatters. Watch chat for the announcement that Team Solve is on.
 
-The streamer can turn Team Solve off at any time. When it is off, chat commands will not change the puzzle.
+The streamer and moderators control Team Solve with `!teamsolve`. Choosing everyone, followers, subscribers, or a saved list of chatters turns it on for that audience. Only one option applies at a time, and the streamer and moderators can always contribute while it is on. Watch chat for announcements about who can contribute.
+
+Use `!teamsolve off` to turn it off; puzzle commands then stop changing the puzzle. Team Solve remembers its on/off state and access choices between sessions. A lost puzzle connection pauses contributions, which resume automatically when the connection returns unless Team Solve has been turned off.
+
+For the control commands and their effects, see [Team Solve streamer commands](docs/streamer-commands.md).
 
 ## Before you make a move
 
@@ -81,7 +84,7 @@ That adds palette color 2 to the cell. The color's meaning is up to the people s
 
 ### Full command list
 
-For the full list of commands, see the [Twitch command language](docs/twitch-command-language.md).
+For the full list of puzzle commands, see the [Twitch command language](docs/twitch-command-language.md).
 
 ## What happens after you send a command?
 

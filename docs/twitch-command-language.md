@@ -2,9 +2,11 @@
 
 This document defines the Twitch chat syntax for entering values in the current puzzle.
 
+For `!teamsolve` controls used by the streamer and moderators, see [Team Solve streamer commands](streamer-commands.md).
+
 ## Command shape
 
-Every command begins with `$` and a target:
+Every puzzle command begins with `$` and a target:
 
 ```text
 $TARGET [DETAILS]
