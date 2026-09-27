@@ -63,13 +63,16 @@ Valid actions are processed immediately in chat-message order. There is no votin
 
 ### Team Solve state
 
-- Team Solve persists its on/off state, selected access option, and named-user list across sessions. Startup always restores the saved state; there is no startup configuration option.
+- Team Solve requires independent enablement in Streamer.bot through Twitch commands and in the SudokuPad tab UI. Neither switch changes the other.
+- Streamer.bot persists its on/off state, selected access option, and named-user list across sessions. Startup always restores the saved state; there is no startup configuration option.
+- The browser switch starts disabled on every puzzle load or reload. Enabling it connects and requests activation for the current puzzle. Only one tab may have the accepted session; accepting another tab revokes the previous one.
 - On first setup, Team Solve is **off**, with list access selected and an empty list.
 - The broadcaster and moderators control Team Solve through one command, `!teamsolve`, with different parameters. See the [streamer command guide](streamer-commands.md) for the complete command set.
 - Selecting `everyone`, `followers`, `subscribers`, or `list` saves that access option and turns Team Solve on. When already on, the change takes effect immediately.
 - `!teamsolve off` turns it off without clearing the selected access option or list. `!teamsolve` without parameters reports status and saved access settings without changing anything.
-- Team Solve accepts puzzle actions only while enabled and connected to a ready browser. Enabling it before the connection is ready makes it wait and start automatically when ready.
-- A lost browser connection pauses contributions without changing the saved on/off state. They resume automatically when the connection returns, unless Team Solve has been turned off. Commands are not queued for later delivery.
+- Team Solve accepts puzzle actions only while both switches are enabled and the selected browser session is accepted and ready. Enabling the Streamer.bot side before the browser is ready makes it wait and start automatically when these conditions are met.
+- A transient connection loss pauses contributions without changing either switch. The still-selected tab may resume automatically once accepted and ready, unless either side has been disabled. Replacement or rejected resume requires explicit browser enablement again. Commands are not queued for later delivery.
+- Disabling the browser discards queued actions, releases its session, and stops reconnecting. Disabling Streamer.bot stops new dispatch while the browser may remain enabled and connected.
 - Command replies, access changes, and announcements about starting, stopping, waiting, and resuming appear publicly in Twitch chat.
 
 ### Permissions
@@ -144,7 +147,7 @@ Each phase should preserve the command-language and transport model established 
 - Keep SudokuPad-specific execution in the userscript.
 - Use a versioned, normalized action contract between the two components.
 - Preserve message order and make each action traceable end to end.
-- Restore the saved on/off state and access settings. Pause contributions when the browser is unavailable and resume when it is ready, unless Team Solve has been turned off.
+- Restore Streamer.bot's saved on/off state and access settings, and require browser enablement for each loaded puzzle instance. Pause contributions when the browser is unavailable and resume only when both switches are enabled and the selected session is accepted and ready.
 - Validate at boundaries even though communication is local to one computer.
 - Prefer explicit operations over state-dependent toggles.
 

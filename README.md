@@ -14,7 +14,9 @@ flowchart LR
 
 The streamer and moderators control Team Solve with `!teamsolve`. Choosing everyone, followers, subscribers, or a saved list of chatters turns it on for that audience. Only one option applies at a time, and the streamer and moderators can always contribute while it is on. Watch chat for announcements about who can contribute.
 
-Use `!teamsolve off` to turn it off; puzzle commands then stop changing the puzzle. Team Solve remembers its on/off state and access choices between sessions. A lost puzzle connection pauses contributions, which resume automatically when the connection returns unless Team Solve has been turned off.
+The streamer must also enable Team Solve in the SudokuPad tab for the current puzzle. Both the Twitch side and the browser side must be on before chat can contribute. Only one tab can be selected at a time, and loading or reloading a puzzle requires enabling it again in that tab.
+
+Use `!teamsolve off` to stop contributions through Twitch, or disable Team Solve in the SudokuPad tab to disconnect it. Each control leaves the other side's switch unchanged. Streamer.bot remembers its on/off state and access choices between sessions. A temporary connection loss pauses contributions, which can resume when the same selected tab reconnects and both sides remain enabled.
 
 For the control commands and their effects, see [Team Solve streamer commands](docs/streamer-commands.md).
 

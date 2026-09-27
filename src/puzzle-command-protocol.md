@@ -2,7 +2,7 @@
 
 Status: First draft, version 1.
 
-This document defines the JSON puzzle-action messages sent from Streamer.bot to Tampermonkey and the acknowledgements returned by Tampermonkey. Component ownership is described in [the component design](design.md); human-facing syntax is defined in [the chat command language](../docs/twitch-command-language.md). Session activation, session close, heartbeat, and readiness message formats are outside this document.
+This document defines the JSON puzzle-action messages sent from Streamer.bot to Tampermonkey and the acknowledgements returned by Tampermonkey. Component ownership is described in [the component design](design.md); human-facing syntax is defined in [the chat command language](../docs/twitch-command-language.md). Session activation/resume, session release/close, heartbeat, and readiness message formats are outside this document.
 
 ## Message envelope
 
@@ -37,13 +37,17 @@ For `$r2c6 5`, Streamer.bot sends:
 
 Identifiers are nonempty opaque strings; the illustrative IDs above do not prescribe their format. Twitch usernames, permissions, and original chat text stay in Streamer.bot for feedback and diagnostics.
 
-Only one browser session is active at a time. The user explicitly requests activation of the current puzzle from its SudokuPad tab; merely opening a socket or reporting readiness does not activate it. Accepting a new selection revokes the old session, closes its pending requests without retrying, and sends the old browser a session-close message. The replaced tab discards queued actions and stops automatic reconnection. Puzzle messages are sent only to the accepted, ready session, and old replies cannot restore ownership.
+Team Solve must be enabled independently in Streamer.bot through the Twitch command interface and in the SudokuPad tab UI. Streamer.bot dispatches puzzle commands only while its switch is on and the enabled browser has an accepted, ready session. Enabling or disabling either side does not change the other side's switch or chat access policy.
 
-Automatic reconnection may resume the still-current selection after a transient disconnect, but cannot take ownership from another tab. A replacement, load, or reload of a puzzle requires explicit activation for that puzzle instance. Session selection does not change Streamer.bot's saved enabled state or access policy.
+Only one browser session is active at a time. Enabling Team Solve in a tab explicitly requests activation of its current puzzle; merely opening a socket or reporting readiness does not activate it. Accepting a new selection revokes the old session, closes its pending requests without retrying, and sends the old browser a session-close message. On receiving the close, the replaced tab disables its browser switch, discards queued actions, and stops automatic reconnection. Puzzle messages are sent only to the accepted, ready session, and old replies cannot restore ownership.
+
+Automatic reconnection may resume the still-current selection after a transient disconnect while the browser switch remains enabled, but cannot take ownership from another tab. A rejected resume disables the tab and requires a new explicit enable action. A replacement, load, or reload of a puzzle clears browser enablement and requires explicit activation for that puzzle instance. Session selection does not change Streamer.bot's saved enabled state or access policy.
+
+Disabling the browser immediately prevents further edits from starting, discards queued actions, releases its session, cancels reconnection, and closes the socket. Streamer.bot closes pending requests without replaying them when the session is released or the connection closes. An edit already applied is not undone by disabling the tab. Turning Streamer.bot off stops new dispatch while the browser may remain enabled and connected.
 
 Tampermonkey generates a fresh `puzzleId` whenever a puzzle loads, including a reload of the same puzzle, and publishes it with readiness information. This is an instance identifier, not a puzzle URL or content hash. A new browser connection has a fresh session identity. Streamer.bot includes the current session and puzzle identifiers in every command.
 
-Tampermonkey checks both identifiers on receipt and again immediately before execution. A queued action must never be applied to a replacement puzzle. A puzzle mismatch returns `failed` with reason `puzzleChanged`; replies echo the identifiers of the original request, not those of the replacement puzzle.
+Tampermonkey checks browser enablement and both identifiers on receipt and again immediately before execution, and requires current puzzle readiness before editing. A queued action must never be applied to a replacement puzzle. A puzzle mismatch returns `failed` with reason `puzzleChanged`; replies echo the identifiers of the original request, not those of the replacement puzzle.
 
 ## Targets
 

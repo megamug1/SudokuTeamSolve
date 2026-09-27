@@ -6,6 +6,8 @@ Status: Architecture and workflow draft
 
 Streamer.bot owns the Twitch-facing workflow. It receives chat events, controls whether Team Solve is active, authorizes chatters, parses the command language, sends normalized actions to the browser, reports selected errors and status changes to chat, and keeps the diagnostic log.
 
+Streamer.bot's saved switch and the SudokuPad tab's browser switch are independent. Commands require both to be enabled and the selected browser session to be accepted and ready. A tab connects only after explicit browser enablement, or to resume an eligible selection after a transient disconnect. Turning Streamer.bot off stops new dispatch without disabling the browser; disabling the browser releases its session without changing Streamer.bot's saved settings. Component and session ownership are detailed in the [component design](../src/design.md).
+
 ## Responsibilities
 
 - Receive Twitch chat messages in arrival order.
@@ -70,7 +72,7 @@ Suggested modules or grouped actions:
 | Team Solve enabled | `false` on first setup | Persist and restore after restart; connection loss does not change it |
 | Selected access option | `list` on first setup | Persist and restore exactly one of `everyone`, `followers`, `subscribers`, or `list` |
 | Named-user list | empty on first setup | Persist independently of the selected access option; supplied names replace the entire list |
-| Browser connection | disconnected until handshake | Runtime readiness; connection loss pauses contributions while preserving enabled state |
+| Browser connection | unavailable until an explicitly enabled tab is accepted and ready | Only one selected session; connection loss pauses contributions while preserving Streamer.bot's enabled state |
 | Outgoing action queue | empty | FIFO; commands are not retained across disconnects or restarts |
 | Pending requests | empty | Keyed by request ID until acknowledgement or timeout |
 
@@ -166,7 +168,7 @@ The planned transport is Streamer.bot's WebSocket capability over the local mach
 
 Required transport behavior:
 
-- know whether an eligible userscript is connected and ready;
+- track the single explicitly enabled, accepted browser session and its readiness;
 - preserve FIFO delivery;
 - assign or propagate unique request IDs;
 - use bounded timeouts and pending-request storage;
