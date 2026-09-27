@@ -2,7 +2,7 @@
 
 Status: First draft, version 1.
 
-This document defines the JSON puzzle-action messages sent from Streamer.bot to Tampermonkey and the acknowledgements returned by Tampermonkey. Component ownership is described in [the component design](design.md); human-facing syntax is defined in [the chat command language](../docs/twitch-command-language.md). Session activation/resume, session release/close, heartbeat, and readiness message formats are outside this document.
+This document defines the JSON puzzle-action messages sent from Streamer.bot to Tampermonkey and the acknowledgements returned by Tampermonkey. Component ownership is described in [the component design](design.md); human-facing syntax is defined in [the chat command language](../docs/twitch-command-language.md). Session activation/resume, session release/close, heartbeat, and readiness message formats are defined in the prototype's [connection protocol](connection-protocol.md).
 
 ## Message envelope
 
